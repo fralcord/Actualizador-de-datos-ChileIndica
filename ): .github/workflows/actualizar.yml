@@ -1,0 +1,34 @@
+name: Actualizador de Datos ChileIndica
+
+on:
+  schedule:
+    # Corre automáticamente todos los días a las 08:00 AM hora de Chile (12:00 UTC)
+    - cron: '0 12 * * *'
+  workflow_dispatch: # Esto permite que tú lo actives manualmente cuando quieras
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar mi codigo
+        uses: actions/checkout@v3
+
+      - name: Instalar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Instalar librerias
+        run: |
+          pip install -r requirements.txt
+
+      - name: Correr el extractor
+        run: python extractor.py
+
+      - name: Guardar datos nuevos en el repositorio
+        run: |
+          git config --global user.name 'Robot ChileIndica'
+          git config --global user.email 'bot@github.com'
+          git add datos.json
+          git commit -m "Actualización automatica de iniciativas" || exit 0
+          git push
