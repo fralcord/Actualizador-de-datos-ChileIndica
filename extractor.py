@@ -3,9 +3,8 @@ from bs4 import BeautifulSoup
 import json
 import re
 
-# Ruta principal basada en tus capturas
-URL_BASE = "http://www.chileindica.cl/loslagos/"
-URL_TRANSPARENCIA = URL_BASE + "modulos/transparencia/listado_iniciativas.php"
+# Ruta que detectamos en tus capturas de pantalla
+URL_INICIO = "http://www.chileindica.cl/loslagos/inversiones/menu_principal_ejecucion.php"
 
 def extraer_datos():
     headers = {
@@ -13,49 +12,53 @@ def extraer_datos():
     }
 
     try:
-        print("Iniciando ruta de Transparencia ChileIndica...")
-        response = requests.get(URL_TRANSPARENCIA, headers=headers, timeout=30)
+        print("Accediendo directamente al Módulo de Seguimiento...")
+        # Usamos una sesión para mantener la conexión activa
+        session = requests.Session()
+        response = session.get(URL_INICIO, headers=headers, timeout=30, verify=False)
         response.encoding = 'utf-8'
         
+        # El sitio usa un sistema de frames o tablas dinámicas
+        # Buscamos todas las tablas en el contenido recibido
         soup = BeautifulSoup(response.text, 'html.parser')
+        tablas = soup.find_all('table')
         
-        # Buscamos la tabla principal de iniciativas
-        tabla = soup.find('table')
-        if not tabla:
-            print("No se encontró la tabla en la ruta de Transparencia.")
-            exit(1)
-
-        filas = tabla.find_all('tr')
+        print(f"Se encontraron {len(tablas)} tablas. Analizando contenido...")
+        
         datos_finales = []
-
-        print(f"Analizando {len(filas)} filas encontradas...")
-
-        for fila in filas:
-            celdas = fila.find_all('td')
-            # Filtramos celdas que tengan la estructura de la tabla de seguimiento
-            if len(celdas) >= 5:
-                texto_celdas = [c.get_text(strip=True) for c in celdas]
-                
-                # Evitamos los encabezados
-                if "Código" not in texto_celdas[0] and texto_celdas[0].isdigit():
-                    datos_finales.append({
-                        "Codigo": texto_celdas[0],
-                        "Iniciativa": texto_celdas[1],
-                        "Etapa": texto_celdas[4] if len(texto_celdas) > 4 else "N/A",
-                        "Institucion": texto_celdas[2],
-                        "Monto": texto_celdas[3]
-                    })
+        
+        # Buscamos la tabla que tenga la palabra 'Iniciativa' o más de 10 columnas
+        for tabla in tablas:
+            filas = tabla.find_all('tr')
+            for fila in filas:
+                celdas = fila.find_all('td')
+                # Según tu captura image_668112.png, la tabla es muy ancha (muchas columnas)
+                if len(celdas) >= 10:
+                    limpio = [c.get_text(strip=True) for c in celdas]
+                    
+                    # Validamos que sea una fila de datos (el código suele ser el segundo campo)
+                    if limpio[1].isdigit():
+                        datos_finales.append({
+                            "Codigo": limpio[1],
+                            "Iniciativa": limpio[2],
+                            "Etapa": limpio[5],
+                            "Unidad_Tecnica": limpio[10],
+                            "Costo_Total": limpio[11],
+                            "Saldo_Anio_Siguiente": limpio[16] if len(limpio) > 16 else "0"
+                        })
 
         if datos_finales:
             with open('datos.json', 'w', encoding='utf-8') as f:
                 json.dump(datos_finales, f, ensure_ascii=False, indent=4)
-            print(f"✅ ¡Automatización completa! {len(datos_finales)} iniciativas procesadas.")
+            print(f"✅ ¡ÉXITO! Se capturaron {len(datos_finales)} iniciativas del panel regional.")
         else:
-            print("❌ No se pudieron procesar las iniciativas. Verificando estructura...")
+            print("❌ No se pudieron validar los datos en las tablas encontradas.")
+            # Si falla, imprimimos un trozo del código para diagnosticar
+            print("Muestra del HTML recibido:", response.text[:500])
             exit(1)
 
     except Exception as e:
-        print(f"❌ Error en la ruta: {str(e)}")
+        print(f"❌ Error técnico: {str(e)}")
         exit(1)
 
 if __name__ == "__main__":
