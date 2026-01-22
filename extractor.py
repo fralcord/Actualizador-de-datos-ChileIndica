@@ -15,36 +15,38 @@ def extraer_datos():
         response.encoding = 'utf-8'
         html = response.text
 
-        # Usamos una técnica de "búsqueda de texto" (Regex) para encontrar las filas 
-        # Esto es más seguro cuando las tablas HTML son complejas
-        print("Buscando datos en el contenido...")
+        print("Buscando filas de iniciativas...")
+        # Buscamos las filas (tr) que contienen celdas (td)
+        # Este nuevo patrón es mucho más potente para detectar la tabla real
+        filas_raw = re.findall(r'<tr[^>]*>(.*?)</tr>', html, re.DOTALL)
         
-        # Este patrón busca el contenido entre las etiquetas <td> de la tabla
-        filas = re.findall(r'<tr>(.*?)</tr>', html, re.DOTALL)
+        datos_finales = []
         
-        if len(filas) > 1:
-            datos_finales = []
-            # Saltamos la primera fila porque suele ser el encabezado
-            for fila in filas[1:]:
-                celdas = re.findall(r'<td.*?>(.*?)</td>', fila, re.DOTALL)
-                if len(celdas) >= 5:
-                    # Limpiamos el texto de etiquetas HTML
-                    celdas_limpias = [re.sub(r'<.*?>', '', c).strip() for c in celdas]
-                    
-                    datos_finales.append({
-                        "Codigo": celdas_limpias[0],
-                        "Iniciativa": celdas_limpias[1],
-                        "Institucion": celdas_limpias[2],
-                        "Monto": celdas_limpias[3],
-                        "Estado": celdas_limpias[4]
-                    })
+        for fila in filas_raw:
+            # Extraemos el contenido de cada celda (td)
+            celdas = re.findall(r'<td[^>]*>(.*?)</td>', fila, re.DOTALL)
             
+            # La tabla de ChileIndica suele tener entre 5 y 8 columnas
+            if len(celdas) >= 5:
+                # Limpiamos etiquetas HTML y espacios en blanco
+                limpio = [re.sub(r'<.*?>', '', c).strip() for c in celdas]
+                
+                # Evitamos los encabezados comparando con el primer campo
+                if "Código" not in limpio[0] and "Iniciativa" not in limpio[0]:
+                    datos_finales.append({
+                        "Codigo": limpio[0],
+                        "Iniciativa": limpio[1],
+                        "Institucion": limpio[2],
+                        "Monto": limpio[3],
+                        "Estado": limpio[4]
+                    })
+        
+        if datos_finales:
             with open('datos.json', 'w', encoding='utf-8') as f:
                 json.dump(datos_finales, f, ensure_ascii=False, indent=4)
-            
-            print(f"✅ ¡LO LOGRAMOS! Se guardaron {len(datos_finales)} iniciativas.")
+            print(f"✅ ¡ÉXITO! Se han extraído {len(datos_finales)} iniciativas.")
         else:
-            print("❌ No se detectaron filas de datos.")
+            print("❌ No se encontraron datos válidos. El sitio podría estar caído o en mantenimiento.")
             exit(1)
 
     except Exception as e:
