@@ -1,56 +1,61 @@
 import requests
+from bs4 import BeautifulSoup
 import json
 import re
 
-URL = "http://www.chileindica.cl/loslagos/modulos/transparencia/listado_iniciativas.php"
+# Ruta principal basada en tus capturas
+URL_BASE = "http://www.chileindica.cl/loslagos/"
+URL_TRANSPARENCIA = URL_BASE + "modulos/transparencia/listado_iniciativas.php"
 
 def extraer_datos():
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'
     }
 
     try:
-        print("Conectando con el servidor de ChileIndica...")
-        response = requests.get(URL, headers=headers, timeout=30, verify=False)
+        print("Iniciando ruta de Transparencia ChileIndica...")
+        response = requests.get(URL_TRANSPARENCIA, headers=headers, timeout=30)
         response.encoding = 'utf-8'
-        html = response.text
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Buscamos la tabla principal de iniciativas
+        tabla = soup.find('table')
+        if not tabla:
+            print("No se encontró la tabla en la ruta de Transparencia.")
+            exit(1)
 
-        print("Buscando filas de iniciativas...")
-        # Buscamos las filas (tr) que contienen celdas (td)
-        # Este nuevo patrón es mucho más potente para detectar la tabla real
-        filas_raw = re.findall(r'<tr[^>]*>(.*?)</tr>', html, re.DOTALL)
-        
+        filas = tabla.find_all('tr')
         datos_finales = []
-        
-        for fila in filas_raw:
-            # Extraemos el contenido de cada celda (td)
-            celdas = re.findall(r'<td[^>]*>(.*?)</td>', fila, re.DOTALL)
-            
-            # La tabla de ChileIndica suele tener entre 5 y 8 columnas
+
+        print(f"Analizando {len(filas)} filas encontradas...")
+
+        for fila in filas:
+            celdas = fila.find_all('td')
+            # Filtramos celdas que tengan la estructura de la tabla de seguimiento
             if len(celdas) >= 5:
-                # Limpiamos etiquetas HTML y espacios en blanco
-                limpio = [re.sub(r'<.*?>', '', c).strip() for c in celdas]
+                texto_celdas = [c.get_text(strip=True) for c in celdas]
                 
-                # Evitamos los encabezados comparando con el primer campo
-                if "Código" not in limpio[0] and "Iniciativa" not in limpio[0]:
+                # Evitamos los encabezados
+                if "Código" not in texto_celdas[0] and texto_celdas[0].isdigit():
                     datos_finales.append({
-                        "Codigo": limpio[0],
-                        "Iniciativa": limpio[1],
-                        "Institucion": limpio[2],
-                        "Monto": limpio[3],
-                        "Estado": limpio[4]
+                        "Codigo": texto_celdas[0],
+                        "Iniciativa": texto_celdas[1],
+                        "Etapa": texto_celdas[4] if len(texto_celdas) > 4 else "N/A",
+                        "Institucion": texto_celdas[2],
+                        "Monto": texto_celdas[3]
                     })
-        
+
         if datos_finales:
             with open('datos.json', 'w', encoding='utf-8') as f:
                 json.dump(datos_finales, f, ensure_ascii=False, indent=4)
-            print(f"✅ ¡ÉXITO! Se han extraído {len(datos_finales)} iniciativas.")
+            print(f"✅ ¡Automatización completa! {len(datos_finales)} iniciativas procesadas.")
         else:
-            print("❌ No se encontraron datos válidos. El sitio podría estar caído o en mantenimiento.")
+            print("❌ No se pudieron procesar las iniciativas. Verificando estructura...")
             exit(1)
 
     except Exception as e:
-        print(f"❌ Error técnico: {str(e)}")
+        print(f"❌ Error en la ruta: {str(e)}")
         exit(1)
 
 if __name__ == "__main__":
