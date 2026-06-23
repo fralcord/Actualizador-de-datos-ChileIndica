@@ -1,0 +1,37 @@
+name: Descarga Diaria ChileIndica
+
+on:
+  schedule:
+    # 07:30 AM en Chile (Horario de invierno UTC-4) equivale a las 11:30 AM UTC
+    - cron: '30 11 * * *'
+  workflow_dispatch: # Esto te permite activar el script manualmente desde GitHub cuando quieras
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Copiar el repositorio actual
+      uses: actions/checkout@v3
+
+    - name: Configurar Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Instalar librerías necesarias
+      run: |
+        python -m pip install --upgrade pip
+        pip install selenium webdriver-manager
+
+    - name: Ejecutar el script de descarga
+      env:
+        CHILEINDICA_USER: ${{ secrets.CHILEINDICA_USER }}
+        CHILEINDICA_PASS: ${{ secrets.CHILEINDICA_PASS }}
+      run: python automatizacion_chileindica.py
+
+    - name: Guardar el nuevo reporte en el repositorio
+      run: |
+        git config --global user.name "GitHub Action Bot"
+        git config --global user.email "action@github.com"
+        git add .
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Actualización automática del reporte diario" && git push)
